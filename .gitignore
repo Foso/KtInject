@@ -1,0 +1,8 @@
+/ktinject-shared/build/
+/example/build/
+/buildSrc/.gradle/
+/.idea/
+/buildSrc/build/
+/ktinject-compiler/build/
+/.gradle/
+/ktinject-annotations/build/

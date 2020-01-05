@@ -1,0 +1,133 @@
+buildscript {
+
+    ext.buildMaven = { p -> repositories { maven { url p } } }
+
+
+    repositories {
+        mavenLocal()
+        google()
+        jcenter()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath "de.jensklingenberg:ktinject:1.0.0"
+
+    }
+
+}
+
+plugins {
+    id 'org.jetbrains.kotlin.multiplatform' version '1.3.61'
+}
+apply plugin: 'de.jensklingenberg.ktinject'
+
+
+
+
+System.setProperty("kotlin.compiler.execution.strategy", "in-process") // For debugging
+
+allprojects {
+    repositories {
+        mavenLocal()
+        mavenCentral()
+        google()
+
+        maven { url "https://maven.google.com" }
+        maven { url "https://plugins.gradle.org/m2/" }
+    }
+}
+
+
+
+
+
+
+allprojects {
+    ext.buildMaven = { p -> repositories { maven { url p } } }
+
+    repositories {
+        mavenLocal()
+        mavenCentral()
+        maven { url "https://maven.google.com" }
+        maven { url "https://plugins.gradle.org/m2/" }
+        google()
+        jcenter()
+
+
+    }
+}
+
+
+kotlin {
+jvm()
+    js() {
+        configure([compilations.main]) {
+            tasks.getByName(compileKotlinTaskName).kotlinOptions {
+                sourceMap = true
+
+                moduleKind = "commonjs"
+                metaInfo = true
+                outputFile = "${project.buildDir.path}/js/${project.name}.js"
+                main = "call"
+            }
+        }
+    }
+    sourceSets {
+        commonMain {
+            dependencies {
+                implementation kotlin('stdlib-common')
+                implementation "io.ktor:ktor-client-core:1.2.3"
+                implementation project(":ktinject-annotations")
+
+            }
+        }
+        commonTest {
+            dependencies {
+                implementation kotlin('test-common')
+
+            }
+        }
+
+        jsMain {
+            dependencies {
+                implementation kotlin('stdlib-js')
+                implementation "io.ktor:ktor-client-js:1.2.3"
+
+            }
+        }
+        jvmMain {
+            sourceSets {
+                kotlin.srcDirs += '/home/jens/Code/2019/KtInject/example/src/jvmMain/build/generated'
+                kotlin.srcDirs += '/build/generated'
+
+
+
+            }
+            dependencies {
+                implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+                implementation "org.jetbrains.kotlin:kotlin-reflect:1.3.50"
+                implementation 'com.squareup:kotlinpoet:1.4.0'
+
+            }
+        }
+        jsTest {
+            dependencies {
+                implementation kotlin('test-js')
+            }
+        }
+
+
+
+    }
+}
+
+
+build{
+    dependsOn ':ktinject-annotations:publishToMavenLocal'
+}
+
+// workaround for https://youtrack.jetbrains.com/issue/KT-27170
+configurations {
+    compileClasspath
+}

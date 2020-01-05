@@ -1,0 +1,4 @@
+include 'example'
+include ':ktinject-compiler'
+include ':ktinject-shared'
+include 'ktinject-annotations'
