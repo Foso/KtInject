@@ -94,9 +94,7 @@ fun generateCompo(myComponent: MyComponent, genAppComponent: GenAppComponent, bu
                 }
     }
 
-    fun genInitFunction(modules: List<MyModule>, injectedClasses: List<InjectedClass>): String {
-        val te = modules.flatMap { it.myProvideFunctions }.sortedBy { it.parameters.size }
-        //TODO:
+    fun genInitFunctionBody(modules: List<MyModule>, injectedClasses: List<InjectedClass>): String {
 
         val rr = modules.joinToString(separator = "\n") { mymod ->
 
@@ -117,14 +115,10 @@ fun generateCompo(myComponent: MyComponent, genAppComponent: GenAppComponent, bu
                         } else {
                             "${prov.name}Provider"
                         }
-
                     }
-
-
                 }
 
                 "this.${providedFunctionName}Provider = ${moduleName}_${providedFunctionName.capitalize()}Factory.create(${createParameters})"
-
             }
             fieldsDeclarationString
         }
@@ -132,91 +126,63 @@ fun generateCompo(myComponent: MyComponent, genAppComponent: GenAppComponent, bu
         return rr
     }
 
-    /**
-     * This generates the builder pattern
-     */
-    fun builderPatternGenerator(modules: List<MyModule>): String {
 
-        fun fields(): String = modules.joinToString(separator = "\n") {
+    fun fields(modules: List<MyModule>): String = modules.joinToString(separator = "\n") {
+        val moduleObjectName = it.className.name.decapitalize() //testModule
+        val moduleClassName = it.className.name
+        """ private  var ${moduleObjectName}: ${moduleClassName}? = null"""
+    }
+
+    fun settter(modules: List<MyModule>): String = modules.joinToString(separator = "\n") {
+
+        val moduleObjectName = it.className.name.decapitalize() //testModule
+        val moduleClassName = it.className.name
+
+        """ fun ${moduleObjectName}(instance: ${moduleClassName}): Builder {
+                    this.${moduleObjectName} = MPreconditions.checkNotNull(instance)
+                   return this
+                 }"""
+    }
+    val appComponentArgs = myComponent.modules.joinToString {
+        val moduleObjectName = it.className.name.decapitalize() //testModule
+        "$moduleObjectName!!"
+    }
+
+    fun moduleNullChecks(modules: List<MyModule>)= modules.joinToString(separator = "\n") {
             val moduleObjectName = it.className.name.decapitalize() //testModule
             val moduleClassName = it.className.name
 
-            """ private  var ${moduleObjectName}: ${moduleClassName}? = null"""
-        }
-
-
-        fun settter(): String = modules.joinToString(separator = "\n") {
-
-            val moduleObjectName = it.className.name.decapitalize() //testModule
-            val moduleClassName = it.className.name
-
-            """ fun ${moduleObjectName}(instance: ${moduleClassName}): Builder {
-             |       this.${moduleObjectName} = MPreconditions.checkNotNull(instance)
-             |      return this
-             |    }"""
-        }
-
-        fun buildFunction(): String {
-
-
-            val moduleNullChecks = modules.joinToString(separator = "\n") {
-                val moduleObjectName = it.className.name.decapitalize() //testModule
-                val moduleClassName = it.className.name
-
-                """
+            """
                     if ($moduleObjectName == null) {
                         $moduleObjectName = $moduleClassName()
                        }
                 """.trimIndent()
-            }
-
-            val appComponentArgs = modules.joinToString(separator = ",") {
-                val moduleObjectName = it.className.name.decapitalize() //testModule
-                "$moduleObjectName!!"
-            }
-
-            return """
-                                 $moduleNullChecks
-                                 return KtInjectAppComponent($appComponentArgs)
-                                
-                """.trimIndent()
         }
 
-        return """
-             
-            ${fields()}
-
-            ${settter()}
-
-             |    
-             |    fun build(): ${genAppComponent.compInterface.name}{
-           ${buildFunction()}
-            |    }
-             """.trimIndent()
-    }
 
 
-    fun componenSourceTemplate() = """
+    val compClassName = "KtInject${genAppComponent.compInterface.name}"
+
+    fun componentSourceTemplate() = """
         ${addPackage("de.jensklingenberg.ktinject")}
 
         ${addImport(MPreconditions::class.java.name)}
         ${addImport(Provider::class.java.name)}
         ${imports(myComponent.modules)}
         ${addImport(genAppComponent.compInterface.packageWithName())}
-        class KtInject${genAppComponent.compInterface.name}(${classParameter(myComponent.modules)}) : ${genAppComponent.compInterface.name} {
+       
+        class ${compClassName}(${classParameter(myComponent.modules)}) : ${genAppComponent.compInterface.name} {
             
         ${providers(myComponent.modules)}
-
             
         init{
              initialize()
         }
         
         private fun initialize() {
-          ${genInitFunction(myComponent.modules, genAppComponent.injectedClasses)}
+          ${genInitFunctionBody(myComponent.modules, genAppComponent.injectedClasses)}
         }
       
-
         ${overrideInjectFuns(genAppComponent.injectFunctions)}
 
         ${localInjectFunctions(genAppComponent.injectedClasses)}
@@ -226,12 +192,21 @@ fun generateCompo(myComponent: MyComponent, genAppComponent: GenAppComponent, bu
         }
 
         class Builder {
-            ${builderPatternGenerator(myComponent.modules).trimMargin()}
+            ${fields(myComponent.modules)}
+            ${settter(myComponent.modules)}
+
+           fun build(): ${genAppComponent.compInterface.name}{
+           
+           ${moduleNullChecks(myComponent.modules)}
+          
+           return ${compClassName}($appComponentArgs)
+           }            
+            
          }
         }
     """.trimIndent()
 
 
 
-    File(buildFolder + "/de/jensklingenberg/ktinject/KtInject${genAppComponent.compInterface.name}.kt").writeText(componenSourceTemplate())
+    File(buildFolder + "/de/jensklingenberg/ktinject/${compClassName}.kt").writeText(componentSourceTemplate())
 }

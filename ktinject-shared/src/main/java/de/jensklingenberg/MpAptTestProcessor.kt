@@ -1,7 +1,6 @@
 package de.jensklingenberg
 
 
-import com.squareup.kotlinpoet.ClassName
 import de.jensklingenberg.ktinject.annotations.Component
 import de.jensklingenberg.ktinject.annotations.Inject
 import de.jensklingenberg.ktinject.annotations.Module
@@ -63,7 +62,6 @@ class MpAptTestProcessor() : AbstractProcessor() {
             when (element) {
                 is Element.ClassElement -> {
                     moduleClasses.add(element)
-                    //getFunctions.add(element.func)
                 }
             }
         }
@@ -72,8 +70,6 @@ class MpAptTestProcessor() : AbstractProcessor() {
             when (element) {
                 is Element.ClassElement -> {
                     componentClasses.add(element)
-
-                    //getFunctions.add(element.func)
                 }
             }
         }
@@ -166,10 +162,7 @@ class MpAptTestProcessor() : AbstractProcessor() {
          * Get all the modules that are set in the Component Annotation
          */
         val selectedModules = myModules.filter {
-
-            val path = it.className.packageName+"."+it.className.name
-            //  path.equals("de.jensklingenberg.ktinject.di.SecondModule")
-            selectedModulesPackages.contains(path)
+            selectedModulesPackages.contains(it.className.packageWithName())
         }
 
         val injectedClasses = groupedInjected.map {
@@ -184,15 +177,10 @@ class MpAptTestProcessor() : AbstractProcessor() {
 
         val myComponent = myComponentBuilder(componentClasses.first(), selectedModules, injectedClasses, injectFunctionsInComponent)
 
-
         KtGenerator(myComponent, buildFolder, provideFunctions)
 
         log("$TAG***Processor over ***")
 
-
-
-
-        // generateCompo(GenAppComponent(compInterface, modules, funcs, injected))
     }
 
 

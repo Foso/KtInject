@@ -13,8 +13,8 @@ injectCar(instance,carProvider.get())
       }
     
       companion object {
-        fun injectTest(instance: MySecondClass, test: Test) {instance.test= test}
-fun injectCar(instance: MySecondClass, car: Car) {instance.car= car}
+        fun injectTest(instance: MySecondClass, test: Test) {instance.test = test}
+fun injectCar(instance: MySecondClass, car: Car) {instance.car = car}
       }
     }
 
