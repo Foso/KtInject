@@ -1,24 +1,19 @@
 package de.jensklingenberg.ktinject.generator
 
-import com.squareup.kotlinpoet.ClassName
-import de.jensklingenberg.ktinject.InjectedClass
-import de.jensklingenberg.ktinject.MyModule
 import de.jensklingenberg.ktinject.common.extensions.addImport
 import de.jensklingenberg.ktinject.common.extensions.addPackage
 import de.jensklingenberg.ktinject.internal.MPreconditions
 import de.jensklingenberg.ktinject.internal.Provider
-import de.jensklingenberg.ktinject.model.ComponentFunction
+import de.jensklingenberg.ktinject.model.*
 import java.io.File
 
 
-class GenAppComponent(val compInterface: ClassName
-                      , val modules: List<MyModule>
-                      , val injectFunctions: List<ComponentFunction> = emptyList(),
+class GenAppComponent(val compInterface: MyClassName,
+                      val injectFunctions: List<ComponentFunction> = emptyList(),
                       val injectedClasses: List<InjectedClass> = emptyList())
 
 
-
-fun generateCompo(genAppComponent: GenAppComponent, buildFolder: String) {
+fun generateCompo(myComponent: MyComponent, genAppComponent: GenAppComponent, buildFolder: String) {
 
 
     /**
@@ -29,7 +24,6 @@ fun generateCompo(genAppComponent: GenAppComponent, buildFolder: String) {
         "override fun inject(instance: ${injectClassName.valueParameter.name}) {" +
                 "inject${injectClassName.valueParameter.name}(instance) " +
                 "}"
-
     }
 
 
@@ -41,16 +35,15 @@ fun generateCompo(genAppComponent: GenAppComponent, buildFolder: String) {
             /**
              * We assume that every provideMethod has a Factory Class and import all Returntypes of the provide Methods
              */
-            val modFactories = it.myProvideFunctions.joinToString(separator = "\n") {provmed->
-                addImport(modImport + "_" + provmed.name.capitalize() + "Factory") +"\n"+
+            val modFactories = it.myProvideFunctions.joinToString(separator = "\n") { provmed ->
+                addImport(modImport + "_" + provmed.name.capitalize() + "Factory") + "\n" +
                         addImport(provmed.returnType.packageWithName())
             }
 
-            addImport(modImport) +"\n"+modFactories
+            addImport(modImport) + "\n" + modFactories
         }
 
-        return ter + "\n" +
-                "import de.jensklingenberg.ktinject.di.AppComponent\n"
+        return ter
     }
 
     /**
@@ -68,12 +61,12 @@ fun generateCompo(genAppComponent: GenAppComponent, buildFolder: String) {
 
         injectedClasses.forEach { injclass ->
 
-            val injectClassName = injclass.className.simpleName
+            val injectClassName = injclass.className.name
 
             val ee = "private fun inject$injectClassName(instance: ${injectClassName}) {\n" +
 
-                    injclass.injectedProperty.joinToString(separator = "\n") { prop ->
-                        " ${injclass.className.simpleName}_MembersInjector.inject${prop.type.simpleName}(instance,provide${prop.type.simpleName}Provider.get())"
+                    injclass.injectedProperties.joinToString(separator = "\n") { prop ->
+                        " ${injclass.className.name}_MembersInjector.inject${prop.type.name}(instance,provide${prop.type.name}Provider.get())"
                     } +
                     "  }\n"
             tt = tt + ee
@@ -94,11 +87,11 @@ fun generateCompo(genAppComponent: GenAppComponent, buildFolder: String) {
                     it.myProvideFunctions
                 }
                 .distinctBy { it.returnType }
-                .joinToString(transform = { providerMethod ->
-                    val providerMethodName = providerMethod.name.decapitalize()
-                    "private lateinit var ${providerMethodName}Provider: Provider<${providerMethod.returnType.name}>"
-                }, separator = "\n")
-
+                .joinToString(separator = "\n") { providerMethod ->
+                    val variable = providerMethod.name.decapitalize()
+                    val T = providerMethod.returnType.name
+                    "private lateinit var ${variable}Provider: Provider<${T}>"
+                }
     }
 
     fun genInitFunction(modules: List<MyModule>, injectedClasses: List<InjectedClass>): String {
@@ -114,14 +107,14 @@ fun generateCompo(genAppComponent: GenAppComponent, buildFolder: String) {
                 val providedTypeName = it.returnType.name
                 val providedFunctionName = it.name
 
-                val createParameters = if(it.parameters.isEmpty()){
+                val createParameters = if (it.parameters.isEmpty()) {
                     "$moduleObjectName"
-                }else{
-                    "${moduleObjectName},"+  it.parameters.joinToString(separator = ",") {returntyp->
-                      val prov =  modules.flatMap { it.myProvideFunctions }.find { it.returnType.packageWithName() == returntyp.packageWithName() }
-                        if(prov==null){
+                } else {
+                    "${moduleObjectName}," + it.parameters.joinToString(separator = ",") { returntyp ->
+                        val prov = modules.flatMap { it.myProvideFunctions }.find { it.returnType.packageWithName() == returntyp.packageWithName() }
+                        if (prov == null) {
                             throw NotImplementedError("No prov method found")
-                        }else{
+                        } else {
                             "${prov.name}Provider"
                         }
 
@@ -166,7 +159,7 @@ fun generateCompo(genAppComponent: GenAppComponent, buildFolder: String) {
         fun buildFunction(): String {
 
 
-            val tt = modules.joinToString(separator = "\n") {
+            val moduleNullChecks = modules.joinToString(separator = "\n") {
                 val moduleObjectName = it.className.name.decapitalize() //testModule
                 val moduleClassName = it.className.name
 
@@ -177,14 +170,14 @@ fun generateCompo(genAppComponent: GenAppComponent, buildFolder: String) {
                 """.trimIndent()
             }
 
-            val args = modules.joinToString(separator = ",") {
+            val appComponentArgs = modules.joinToString(separator = ",") {
                 val moduleObjectName = it.className.name.decapitalize() //testModule
                 "$moduleObjectName!!"
             }
 
             return """
-                                 ${tt}
-                                 return KtInjectAppComponent(${args})
+                                 $moduleNullChecks
+                                 return KtInjectAppComponent($appComponentArgs)
                                 
                 """.trimIndent()
         }
@@ -196,7 +189,7 @@ fun generateCompo(genAppComponent: GenAppComponent, buildFolder: String) {
             ${settter()}
 
              |    
-             |    fun build(): AppComponent{
+             |    fun build(): ${genAppComponent.compInterface.name}{
            ${buildFunction()}
             |    }
              """.trimIndent()
@@ -208,19 +201,19 @@ fun generateCompo(genAppComponent: GenAppComponent, buildFolder: String) {
 
         ${addImport(MPreconditions::class.java.name)}
         ${addImport(Provider::class.java.name)}
-        ${imports(genAppComponent.modules)}
-
-        class KtInjectAppComponent(${classParameter(genAppComponent.modules)}) : AppComponent {
+        ${imports(myComponent.modules)}
+        ${addImport(genAppComponent.compInterface.packageWithName())}
+        class KtInject${genAppComponent.compInterface.name}(${classParameter(myComponent.modules)}) : ${genAppComponent.compInterface.name} {
             
-        ${providers(genAppComponent.modules)}
+        ${providers(myComponent.modules)}
 
             
         init{
              initialize()
         }
         
-        fun initialize() {
-          ${genInitFunction(genAppComponent.modules, genAppComponent.injectedClasses)}
+        private fun initialize() {
+          ${genInitFunction(myComponent.modules, genAppComponent.injectedClasses)}
         }
       
 
@@ -233,12 +226,12 @@ fun generateCompo(genAppComponent: GenAppComponent, buildFolder: String) {
         }
 
         class Builder {
-            ${builderPatternGenerator(genAppComponent.modules).trimMargin()}
+            ${builderPatternGenerator(myComponent.modules).trimMargin()}
          }
         }
     """.trimIndent()
 
 
 
-    File(buildFolder + "/de/jensklingenberg/ktinject/KtInjectAppComponent.kt").writeText(componenSourceTemplate())
+    File(buildFolder + "/de/jensklingenberg/ktinject/KtInject${genAppComponent.compInterface.name}.kt").writeText(componenSourceTemplate())
 }

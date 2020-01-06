@@ -1,74 +1,66 @@
 package de.jensklingenberg.ktinject.generator
 
-import com.squareup.kotlinpoet.*
-import de.jensklingenberg.ktinject.common.extensions.GenMemberInjector
-import de.jensklingenberg.ktinject.common.extensions.addStatements
-import de.jensklingenberg.ktinject.common.extensions.asParameterOf
+import de.jensklingenberg.ktinject.common.extensions.addImport
+import de.jensklingenberg.ktinject.common.extensions.addPackage
 import de.jensklingenberg.ktinject.internal.MembersInjector
 import de.jensklingenberg.ktinject.internal.Provider
+import de.jensklingenberg.ktinject.model.InjectedClass
 import java.io.File
 
 
+fun generateMemberInjectors(injectedClass: InjectedClass, buildFolder: String) {
 
+    val injectTargetClassName = injectedClass.className
 
-fun generateMemberInjectors(genMemberInjector: GenMemberInjector) {
-    val instanceArgName = "instance"
+    //Name of inject Class
+    val cName = injectTargetClassName.name
 
-    val constructorParameterList = genMemberInjector.injectProperty.map { it.type }
-            .map {
-                val propName = it.simpleName.toLowerCase()
-                ParameterSpec.builder(propName + "Provider", it.asParameterOf(Provider::class)).build()
+    val classParameter = injectedClass.injectedProperties.map { it.type }
+            .joinToString(separator = ",") {
+                val propName = it.name.toLowerCase()
+                val T = it.name
+                "val ${propName}Provider: Provider<${T}>"
             }
-    val injectTargetClass = genMemberInjector.injectedClass
 
-    val companionfunctionsList = genMemberInjector.injectProperty.map {
-        val propName = it.type.simpleName.toLowerCase()
-        FunSpec.builder("inject" + it.type.simpleName)
-                .addParameter(ParameterSpec.builder(instanceArgName, injectTargetClass).build())
-                .addParameter(ParameterSpec.builder(propName, it.type).build())
-                .addStatement("instance.${it.name}=$propName")
-                .build()
+    val injectMembersBody =  injectedClass.injectedProperties.map { it.type }.joinToString("\n") {
+        val propName = it.name.toLowerCase()
+        val T = it.name
+
+        "inject${T}(instance,${propName}Provider.get())"
     }
 
 
-    val companion = TypeSpec.companionObjectBuilder()
-            .addFunctions(companionfunctionsList)
-            .build()
+    val injectFunctions =  injectedClass.injectedProperties.joinToString(separator = "\n") {
+        val T = it.type.name
+        val varName = it.name
 
-    val membersInjectorFunctionStatement = genMemberInjector.injectProperty.map {
-        val propName = it.type.simpleName.toLowerCase()
-
-        "inject" + it.type.simpleName + "(" + instanceArgName + ",${propName}Provider.get())"
+        "fun inject${T}(instance: ${cName}, ${varName}: ${T}) {instance.${varName} = ${varName}}"
     }
 
-    val props = genMemberInjector.injectProperty.map { it.type }
-            .map {
-                val propName = it.simpleName.toLowerCase()
-                PropertySpec.builder(propName + "Provider", it.asParameterOf(Provider::class)).initializer(it.simpleName.toLowerCase() + "Provider").build()
-            }
+    val otherimports =  injectedClass.injectedProperties.joinToString(separator = "\n") {
+        addImport(it.type.packageName + "." + it.type.name)
+    }
 
+    fun memberInjectorTemplate() = """
+    ${addPackage("de.jensklingenberg.ktinject")}
+    ${addImport(MembersInjector::class.java.name)}
+    ${addImport(Provider::class.java.name)}
+    $otherimports
 
-    val membersInjectorFunction = FunSpec.builder("injectMembers").addParameter(ParameterSpec.builder("instance", injectTargetClass)
-            // .defaultValue("\"pie\"")
-            .build())
-            .addStatements(membersInjectorFunctionStatement)
-            .addModifiers(KModifier.OVERRIDE)
-            .build()
+    class ${cName}_MembersInjector(${classParameter}) : MembersInjector<${cName}> {
 
-    val file = FileSpec.builder(genMemberInjector.injectedClass.packageName, "${injectTargetClass.simpleName}_MembersInjector")
-            .addType(TypeSpec.classBuilder("${injectTargetClass.simpleName}_MembersInjector")
-                    .addSuperinterface(injectTargetClass.asParameterOf(MembersInjector::class))
-                    .addType(companion)
-                    .addProperties(props)
-                    .primaryConstructor(FunSpec.constructorBuilder()
-                            .addParameters(constructorParameterList)
-                            .build())
+      override fun injectMembers(instance: ${cName}) {
+        $injectMembersBody
+      }
+    
+      companion object {
+        $injectFunctions
+      }
+    }
 
-                    .addFunction(membersInjectorFunction)
+"""
 
-                    .build())
-            .build()
-    //file.writeTo(System.out)
-    file.writeTo(File(genMemberInjector.filePath))
+    File(buildFolder + "/" + injectTargetClassName.packageName.replace(".", "/") + "/" + injectTargetClassName.name + "_MembersInjector.kt").writeText(memberInjectorTemplate())
+
 
 }
